@@ -3,6 +3,8 @@
     This function removes virtual machines and related records in AD domain, DNS zone, DHCP scopes
 .DESCRIPTION
     This function removes virtual machines and related records in AD domain, DNS zone, DHCP scopes
+    TODO: Try/Catch
+    TODO: Force ADObject remove
 .EXAMPLE
     Remove-VMandRecords -SearchMask "computer" -DNSServer "dns00.domain.com"
     Removes VM "computer"
@@ -12,7 +14,7 @@
 #>
 
 function Remove-VMandRecords {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess=$true)]
     param (
         # Name of VM(s) to remove.
         [Parameter(Mandatory=$true)]
@@ -72,14 +74,14 @@ function Remove-VMandRecords {
             $nameSplit = $object.DNSName.Split('.')
             $zoneName = $nameSplit[1..($namesplit.Length - 1)] -join '.'
             $hostDNSName = $nameSplit[0]
-            Remove-SCVirtualMachine -VM $hostDNSName -Force -Confirm:$false -WhatIf
+            Remove-SCVirtualMachine -VM $hostDNSName -Force -Confirm:$false
             if (Get-DnsServerResourceRecord -ComputerName $DNSServer -ZoneName $zoneName -Name $hostDNSName) {
-                Remove-DnsServerResourceRecord -ComputerName $DNSServer -ZoneName $zoneName -Name $hostDNSName -Force -RRType A -Confirm:$false -WhatIf
+                Remove-DnsServerResourceRecord -ComputerName $DNSServer -ZoneName $zoneName -Name $hostDNSName -Force -RRType A -Confirm:$false
             } else {
                 Write-Host "There are no records for" $object.DNSName
             }
             if ($object.DistinguishedName) {
-                Remove-ADComputer -Identity $object.DistinguishedName -Confirm:$false -WhatIf
+                Remove-ADObject -Identity $object.DistinguishedName -Server $DNSserver -Recursive -IncludeDeletedObjects -Verbose -Confirm:$false
             } else {
                 Write-Host "There is no DName for" $object.DNSName
             }
@@ -88,7 +90,7 @@ function Remove-VMandRecords {
                     [string]$netToString = $net.NetworkAddress.ToString()
                     $object.MACAddresses.ForEach({
                         if (Get-DhcpServerv4Lease -ComputerName $DHCPinDC.DnsName -ScopeId $netToString -ClientId $_) {
-                            Remove-DhcpServerv4Lease -ComputerName $DHCPinDC.DnsName -ScopeId $netToString -ClientId $_ -Confirm:$false -WhatIf
+                            Remove-DhcpServerv4Lease -ComputerName $DHCPinDC.DnsName -ScopeId $netToString -ClientId $_ -Confirm:$false
                         } else {
                             Write-Host "There are no known leases for" $object.DNSName "with MAC address" $_
                         }
@@ -109,6 +111,6 @@ function Remove-VMandRecords {
     }
     
     end {
-        $ObjectToKill.ForEach({Remove-Records $_ -WhatIf})
+        $ObjectToKill.ForEach({Remove-Records $_})
     }
 }
